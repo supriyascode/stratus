@@ -3,6 +3,7 @@ from typing import Sequence, List, Dict, Mapping, Optional, Any
 from edas.process.test import TestDataManager as mgr
 import time, xarray as xa
 from stratus.app.core import StratusCore
+from eofs.examples import example_data_path
 
 USE_OPENDAP = True
 
@@ -18,9 +19,10 @@ if __name__ == "__main__":
 # Define an analytics request (time average of merra2 surface temperature) directed to the 'xop' endpoint
 
     uri = mgr.getAddress("merra2", "tas") if USE_OPENDAP else "collection://cip_merra2_mth"
+    filename = example_data_path('sst_ndjfm_anom.nc')
     requestSpec = dict(
-        input=dict(uri=uri, name=f"tas"),
-        operation=[ dict(name="xop:ave", axis="time") ]
+        input=dict(filename=filename, name=f"sst"),
+        operation=[dict(name="xop:ave", axis="time")]
     )
 
 # Submit the request to the server and wait for the result

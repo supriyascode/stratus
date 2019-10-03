@@ -72,13 +72,13 @@ class XaOpsExecutable(Executable):
             TaskResult: The result of the operation.
             """
         print( f"Executing request {self.request}" )
-        inputSpec = self.request.get('input',[])
-        dset: xa.Dataset = xa.open_dataset( inputSpec['uri'] )
+        inputSpec = self.request.get('input', [])
+        dset: xa.Dataset = xa.open_dataset(inputSpec['filename'])
         vid = inputSpec['name']
-        variable: xa.DataArray = dset.data_vars[ vid ]
-        result_arrays = self.operate( vid, variable )
-        resultDataset = xa.Dataset( result_arrays, dset.coords, dset.attrs)
-        return TaskResult( kwargs, [ resultDataset ] )
+        variable: xa.DataArray = dset.data_vars[vid]
+        result_arrays = self.operate(vid, variable)
+        resultDataset = xa.Dataset(result_arrays, dset.coords, dset.attrs)
+        return TaskResult(kwargs, [resultDataset])
 
     def operate(self, vid: str, variable: xa.DataArray )-> Dict[str,xa.DataArray] :
         """
