@@ -96,6 +96,7 @@ class XaOpsExecutable(Executable):
             solver = Eof(variable, weights=wgts)
             if opId == "correlation":
                 result_arrays = solver.eofsAsCorrelation(neofs=1)
-            else:
+            elif opId == "covariance":
                 result_arrays = solver.eofsAsCovariance(neofs=1)
+            else: raise Exception(f"Unknown operation for EOF: '{opId}'")
         return result_arrays

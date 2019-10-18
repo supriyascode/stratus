@@ -21,7 +21,7 @@ if __name__ == "__main__":
     filename = example_data_path('sst_ndjfm_anom.nc')
     requestSpec = dict(
         input=dict(filename=filename, name=f"sst"),
-        operation=[dict(name="xop:ave", axis="time")]
+        operation=[dict(name="xop:correlation", axis="time")]
     )
 
 # Submit the request to the server and wait for the result
