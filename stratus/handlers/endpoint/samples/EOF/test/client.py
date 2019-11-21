@@ -11,7 +11,7 @@ import cartopy.feature as cfeature
 
 USE_OPENDAP = True
 
-def displayOutput(cf):
+def displayOutput(dset):
     clevs = np.linspace(-1, 1, 11)
     fig = plt.figure(figsize=(15, 15))
     ax = plt.axes(projection=ccrs.PlateCarree(central_longitude=190))
