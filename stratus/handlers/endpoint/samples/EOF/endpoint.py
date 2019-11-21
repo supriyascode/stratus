@@ -9,13 +9,12 @@ from eofs.xarray import Eof
 
 
 class XaOpsEndpoint(ExecEndpoint):
-
     """
         This class is used to implement the capabilities of the Endpoint.
     """
 
     @abc.abstractmethod
-    def createExecutable( self, requestSpec: Dict, inputs: List[TaskResult] = None, **kwargs ) -> Executable:
+    def createExecutable(self, requestSpec: Dict, inputs: List[TaskResult] = None, **kwargs) -> Executable:
         """
             Factory method for Executable objects.
             Creates an Executable for each analytics operation
@@ -27,21 +26,21 @@ class XaOpsEndpoint(ExecEndpoint):
             Returns:
             Executable: A Executable object which execute the operation.
             """
-        return XaOpsExecutable( requestSpec, inputs, **kwargs )
+        return XaOpsExecutable(requestSpec, inputs, **kwargs)
 
-    def init( self ):
+    def init(self):
         """
             Used to startup analytic resources such as scheduler, worker nodes, database, etc.
             """
         return
 
-    def shutdown(self, **kwargs ):
+    def shutdown(self, **kwargs):
         """
             Used to shut down and release resources that were alloacted in the init method.
             """
         return
 
-    def capabilities(self, type: str, **kwargs ) -> Dict:
+    def capabilities(self, type: str, **kwargs) -> Dict:
         """
             Used to return metadata describing the capabilities of the Endpoint.
             The only required response is the definition the Endpoint Address (epa) for this Endpoint.
@@ -53,12 +52,10 @@ class XaOpsEndpoint(ExecEndpoint):
             Returns:
                   Dict:  metadata describing the capabilities of the Endpoint.
             """
-        return dict( epas = [ "xop*"] )
-
+        return dict(epas=["xop*"])
 
 
 class XaOpsExecutable(Executable):
-
     """
         This class is used to implement a single operation.
     """
@@ -79,7 +76,6 @@ class XaOpsExecutable(Executable):
         vid = inputSpec['name']
         variable: xa.DataArray = dset[vid]
         result_arrays = self.operate(vid, variable)
-        # resultDataset = xa.Dataset( result_arrays, dset.coords, dset.attrs)
         return TaskResult(kwargs, [result_arrays])
 
     def operate(self, vid: str, variable: xa.DataArray) -> Dict[str, xa.DataArray]:
@@ -98,5 +94,6 @@ class XaOpsExecutable(Executable):
                 result_arrays = solver.eofsAsCorrelation(neofs=1)
             elif opId == "covariance":
                 result_arrays = solver.eofsAsCovariance(neofs=1)
-            else: raise Exception(f"Unknown operation for EOF: '{opId}'")
+            else:
+                raise Exception(f"Unknown operation for EOF: '{opId}'")
         return result_arrays

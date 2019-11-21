@@ -1,11 +1,29 @@
 from stratus_endpoint.handler.base import TaskHandle, TaskResult
 from typing import Sequence, List, Dict, Mapping, Optional, Any
-from edas.process.test import TestDataManager as mgr
 import time, xarray as xa
 from stratus.app.core import StratusCore
 from eofs.examples import example_data_path
+import matplotlib.pyplot as plt
+import numpy as np
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 USE_OPENDAP = True
+
+def displayOutput(cf):
+    clevs = np.linspace(-1, 1, 11)
+    fig = plt.figure(figsize=(15, 15))
+    ax = plt.axes(projection=ccrs.PlateCarree(central_longitude=190))
+    fill = dset.to_array()[0][0].plot.contourf(ax=ax, levels=clevs, cmap=plt.cm.RdBu_r,
+                                               add_colorbar=False, transform=ccrs.PlateCarree())
+    ax.add_feature(cfeature.LAND, facecolor='w', edgecolor='k')
+    cb = plt.colorbar(fill, orientation='horizontal')
+    cb.set_label('correlation coefficient', fontsize=12)
+    ax.set_title('EOF1 expressed as correlation', fontsize=16)
+    plt.xlim(-100, 100)
+    plt.ylim(-100, 100)
+    plt.show()
 
 if __name__ == "__main__":
     start = time.time()
@@ -39,4 +57,8 @@ if __name__ == "__main__":
         rpath = f"/tmp/endpoint-sample-result-{ind}.nc"
         print( f"Saving result to {rpath}\n\n")
         dset.to_netcdf( rpath )
+        displayOutput(dset)
+
+
+
 
