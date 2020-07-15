@@ -11,7 +11,7 @@ import h5py
 import timeit
 import pandas as pd
 from netCDF4 import Dataset
-
+import pdb
 
 class XaOpsEndpoint(ExecEndpoint):
     """
@@ -250,14 +250,14 @@ class XaOpsExecutable(Executable):
         #--------------STEP 6: Start Aggregation------------------------------------------------
 
 
-        result_file = self.operate(fname1,fname2,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
+        xds = self.operate(fname1,fname2,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
                                     grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, spl_num, \
                                     sts_name, histnames, bin_num1, bin_num2, year, month, map_lat, map_lon, \
                                     unit_list, scale_list, offst_list, longname_list, fillvalue_list,output_dir, output_prefix)
 
 
-        resultDataset = xa.DataArray(result_file, name='test')
-        return TaskResult(kwargs, [resultDataset])
+        #resultDataset = xa.DataArray(xds, name='test')
+        return TaskResult(kwargs, [xds])
 
 
 
@@ -348,10 +348,15 @@ class XaOpsExecutable(Executable):
                         series.addGridEntry(ff,new_name,unit_list[cnt],longname_list[cnt],fillvalue_list[cnt],scale_list[cnt],offst_list[cnt],grid_data[key])
                         cnt += 1
             
+            
+            
             ff.close()
 
-            print(l3name+subname+' Saved!')
+            xds = xa.open_dataset(output_dir+l3name+subname)
+            # print(l3name+subname+' Saved!')
+
+            # convert h5py to xarray
 
         else:
             raise Exception(f"Unknown operation: '{request}'")
-        return l3name+subname
+        return xds
