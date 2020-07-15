@@ -2,6 +2,8 @@ from stratus_endpoint.handler.base import TaskHandle, TaskResult
 from typing import Sequence, List, Dict, Mapping, Optional, Any
 import time
 from stratus.app.core import StratusCore
+import os
+
 
 if __name__ == "__main__":
     start = time.time()
@@ -47,7 +49,13 @@ if __name__ == "__main__":
     # Display the result
 
     print("\n\nCompleted computation in " + str(time.time() - start) + " seconds")
-    import pdb
-    pdb.set_trace()
-    result_file_name = result.data[0] 
-    print("\n\nOutput file " + result.data[0] + " Saved!")
+
+    result_file = result.data[0] 
+    
+    output_dir = 'client_result'
+    if os.path.exists(output_dir) is False:
+        os.makedir(output_dir)
+    
+    result_file.to_netcdf(os.path.join(output_dir,'tmp.hdf5'), mode='w', format='NETCDF4')
+    
+    print("Result saved at " + output_dir)
