@@ -12,6 +12,7 @@ import timeit
 import pandas as pd
 from netCDF4 import Dataset
 import pdb
+import json
 
 class XaOpsEndpoint(ExecEndpoint):
     """
@@ -101,10 +102,11 @@ class XaOpsExecutable(Executable):
         # sts_switch = np.array(sys.argv[7:14],dtype=np.int)
         sts_switch = np.fromstring(inputSpec['sts_switch'],dtype=np.int, sep=',')
         sts_switch = np.array((sts_switch == 1))
-        varlist = inputSpec['varlist']
+        #varlist = inputSpec['varlist']
 
         # Read the variable names from the variable name list
-        text_file = np.array(pd.read_csv(varlist, header=0, delim_whitespace=True)) #open(varlist, "r")
+        #text_file = np.array(pd.read_csv(varlist, header=0, delim_whitespace=True)) #open(varlist, "r")
+        text_file = np.array(pd.DataFrame.from_dict(json.loads(inputSpec['varlist']))) 
         varnames  = text_file[:,0] 
 
         if sts_switch[5] == True: 
@@ -114,8 +116,9 @@ class XaOpsExecutable(Executable):
 
         if sts_switch[6] == True:   
             # Read the joint histogram names from the variable name list
-            jvarlist = inputSpec['jvarlist']
-            text_file = np.array(pd.read_csv(jvarlist, header=0, delim_whitespace=True)) #open(varlist, "r")
+            #jvarlist = inputSpec['jvarlist']
+            #text_file = np.array(pd.read_csv(jvarlist, header=0, delim_whitespace=True)) #open(varlist, "r")
+            text_file = np.array(pd.DataFrame.from_dict(json.loads(inputSpec['jvarlist']))) #open(varlist, "r")
             histnames = text_file[:,1] 
             var_idx   = text_file[:,2] #This is the index of the input variable name which is used for 2D histogram
             intervals_2d = text_file[:,3]
@@ -123,14 +126,16 @@ class XaOpsExecutable(Executable):
             intervals_2d,var_idx = [0],[0]
 
         #-------------STEP 1: Set up the specific directory --------
-        data_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=0, delim_whitespace=True))
+        # data_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=0, delim_whitespace=True))
+        data_path_file = np.array(pd.DataFrame.from_dict(json.loads(inputSpec['data_path_file'])))   
         MYD06_dir    = data_path_file[0,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD06_L2/'
         MYD06_prefix = data_path_file[0,1] #'MYD06_L2.A'
         MYD03_dir    = data_path_file[1,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD03/'
         MYD03_prefix = data_path_file[1,1] #'MYD03.A'
         fileformat = 'hdf'
 
-        output_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=3, delim_whitespace=True))
+        # output_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=3, delim_whitespace=True))
+        output_path_file = np.array(pd.DataFrame.from_dict(json.loads(inputSpec['output_path']))) 
         output_dir = output_path_file[0,0]
         output_prefix = output_path_file[0,1]
 
