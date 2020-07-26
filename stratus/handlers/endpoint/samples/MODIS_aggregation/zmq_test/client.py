@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     #arg_string = "data_path.csv 2008/01/01 2008/01/01 [-90,90,-180,180] [1,1] [5] 1 1 1 1 1 1 1 input_file.csv input_Jhist.csv"
 
-    print("\n\n in client")
+    print("\n\n in zmq client")
 
     df_datapath = pd.read_csv('data_path.csv',  header=0, delim_whitespace=True)
     df_output_path = pd.read_csv('data_path.csv',  header=3, delim_whitespace=True)
@@ -84,6 +84,7 @@ if __name__ == "__main__":
 
     l3name  = output_prefix + '.A{:04d}{:02d}'.format(year,month)
     subname = '_baseline_monthly_v8_client.h5'
+    subname2 = '_baseline_monthly_v8_client.nc'
 
     # result_file.to_netcdf(os.path.join(output_dir,'baseline_monthly_v8_client.h5'), mode='w', format='NETCDF4')
     result_file.to_netcdf(os.path.join(output_dir,l3name+subname), mode='w', format='NETCDF4')
