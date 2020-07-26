@@ -3,7 +3,7 @@ from typing import List, Dict
 from stratus_endpoint.handler.execution import Executable, ExecEndpoint
 import xarray as xa
 import abc
-import source.baseline.baseline_series_v8 as series
+import source.baseline.baseline_series_v8_supriya as series
 import numpy as np
 from datetime import date, datetime
 from dateutil.rrule import rrule, DAILY, MONTHLY
