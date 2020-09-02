@@ -1,3 +1,7 @@
+[![Binder](https://binder.pangeo.io/badge_logo.svg)](https://binder.pangeo.io/v2/gh/supriyascode/stratus/master)
+
+
+
 ##stratus
 #### Synchronization Technology Relating Analytic Transparently Unified Services
 
