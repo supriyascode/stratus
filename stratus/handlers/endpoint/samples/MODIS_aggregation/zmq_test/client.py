@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     l3name  = output_prefix + '.A{:04d}{:02d}'.format(year,month)
     subname = '_baseline_monthly_v8_client.h5'
-    subname2 = '_baseline_monthly_v8_client.nc'
+    # subname2 = '_baseline_monthly_v8_client.nc'
 
     # result_file.to_netcdf(os.path.join(output_dir,'baseline_monthly_v8_client.h5'), mode='w', format='NETCDF4')
     result_file.to_netcdf(os.path.join(output_dir,l3name+subname), mode='w', format='NETCDF4')
