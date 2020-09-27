@@ -49,9 +49,10 @@ class ZMQClient(StratusClient):
 
     def __init__( self, **kwargs ):
         super(ZMQClient, self).__init__( "zeromq", **kwargs )
+        # self.host_address = self.parm( "host", "10.2.15.251" )
         self.host_address = self.parm( "host", "127.0.0.1" )
-        self.default_request_port = int( self.parm( "request_port", 4556 ) )
-        self.response_port = int( self.parm( "response_port", 4557 ) )
+        self.default_request_port = int( self.parm( "request_port", 4566 ) )
+        self.response_port = int( self.parm( "response_port", 4567 ) )
         self.context = None
 
     def init(self, **kwargs):
@@ -60,7 +61,14 @@ class ZMQClient(StratusClient):
                 self.context = zmq.Context()
                 self.connector = ConnectionMode( **self.parms )
                 self.request_socket = self.context.socket(zmq.REQ)
-                self.request_port = self.connector.connectSocket(self.request_socket, self.host_address, self.default_request_port )
+                import pdb; pdb.set_trace()
+                from zmq import ssh
+                
+                # self.request_port = self.connector.connectSocket(self.request_socket, self.host_address, self.default_request_port )
+
+                self.request_port = 4566
+                ssh.tunnel_connection(self.request_socket, "tcp://127.0.0.1:4566","supriys1@taki.rs.umbc.edu:22")
+                
                 self.log("[1]Connected request socket to server {0} on port: {1}".format( self.host_address, self.request_port ) )
                 local_stack = str( [ str(sl) + "\n" for sl in traceback.format_stack() ] )
                 print( f"Initialized zmq client at:\n{local_stack}" )
