@@ -8,6 +8,7 @@ from stratus_endpoint.handler.base import TaskHandle, Status, TaskResult, Failed
 from zmq.auth.thread import ThreadAuthenticator
 import os, pickle, queue
 import xarray as xa
+from zmq import ssh
 from enum import Enum
 MB = 1024 * 1024
 
@@ -29,6 +30,12 @@ class ConnectionMode():
         socket.connect("tcp://{0}:{1}".format( host, port ) )
         return port
 
+    def connectSocketViaSSH( self, socket: zmq.Socket, host: str, port: int, server_ssh: str ):
+        #self.addClientAuth( socket )  # TODO: this is commented to avoid key checking
+        ssh.tunnel_connection(socket, "tcp://{0}:{1}".format( host, port ),server_ssh)
+        return port
+
+
     def addClientAuth( self, socket: zmq.Socket ):
         self.logger.info( f"Adding ZMQ client auth using keys from dir: {self.cert_dir}")
         client_secret_file = os.path.join( self.secret_keys_dir, "client.key_secret")
@@ -49,11 +56,13 @@ class ZMQClient(StratusClient):
 
     def __init__( self, **kwargs ):
         super(ZMQClient, self).__init__( "zeromq", **kwargs )
-        # self.host_address = self.parm( "host", "10.2.15.251" )
+        
+        # self.host_address = self.parm( "host", "192.168.0.100" )
         self.host_address = self.parm( "host", "127.0.0.1" )
         self.default_request_port = int( self.parm( "request_port", 4566 ) )
-        self.response_port = int( self.parm( "response_port", 4567 ) )
+        self.response_port = int( self.parm( "response_port", 4566 ) )
         self.context = None
+        self.server_ssh = "supriys1@taki.rs.umbc.edu:22" 
 
     def init(self, **kwargs):
         try:
@@ -61,13 +70,10 @@ class ZMQClient(StratusClient):
                 self.context = zmq.Context()
                 self.connector = ConnectionMode( **self.parms )
                 self.request_socket = self.context.socket(zmq.REQ)
-                import pdb; pdb.set_trace()
-                from zmq import ssh
-                
+               
                 # self.request_port = self.connector.connectSocket(self.request_socket, self.host_address, self.default_request_port )
-
-                self.request_port = 4566
-                ssh.tunnel_connection(self.request_socket, "tcp://127.0.0.1:4566","supriys1@taki.rs.umbc.edu:22")
+                self.request_port = self.connector.connectSocketViaSSH(self.request_socket, self.host_address, self.default_request_port, self.server_ssh )
+               
                 
                 self.log("[1]Connected request socket to server {0} on port: {1}".format( self.host_address, self.request_port ) )
                 local_stack = str( [ str(sl) + "\n" for sl in traceback.format_stack() ] )
@@ -87,6 +93,8 @@ class ZMQClient(StratusClient):
         if "error" in response: raise Exception( f"Server Error: {response['error']}" )
         status = Status.decode( response.get('status') )
         self.log( str(response) )
+        # import pdb; pdb.set_trace()
+        # self.response_port = 4566
         response_manager = ResponseManager( self.context, self.connector, response["rid"], self.host_address, self.response_port, status, self.cache_dir, **kwargs )
         response_manager.start()
         return zmqTask( self.cid, response_manager )
@@ -110,6 +118,7 @@ class ZMQClient(StratusClient):
             message = "!".join( [ requestId, type, msg ] )
             self.request_socket.send_string( message )
             response = self.request_socket.recv_string()
+            # import pdb; pdb.set_trace()
         except zmq.error.ZMQError as err:
             self.logger.error( "Error sending message {0} on request socket: {1}".format( msg, str(err) ) )
             response = str(err)
@@ -154,7 +163,8 @@ class ResponseManager(Thread):
         try:
             self.log("Run RM thread")
             response_socket: zmq.Socket = self.context.socket( zmq.SUB )
-            response_port = self._connector.connectSocket( response_socket, self.host, self.port )
+            # response_port = self._connector.connectSocket( response_socket, self.host, self.port )
+            response_port = self._connector.connectSocketViaSSH(response_socket, '127.0.0.1', '4567', "supriys1@taki.rs.umbc.edu:22"  )
             response_socket.subscribe( s2b( self.requestId ) )
             self.log("Connected response socket on port {} with subscription (client/request) id: '{}', active = {}".format( response_port, self.requestId, str(self.active) ) )
             while( self.active ):
