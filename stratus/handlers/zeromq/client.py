@@ -57,7 +57,6 @@ class ZMQClient(StratusClient):
     def __init__( self, **kwargs ):
         super(ZMQClient, self).__init__( "zeromq", **kwargs )
         
-        # self.host_address = self.parm( "host", "192.168.0.100" )
         self.host_address = self.parm( "host", "127.0.0.1" )
         self.default_request_port = int( self.parm( "request_port", 4566 ) )
         self.response_port = int( self.parm( "response_port", 4566 ) )
@@ -72,8 +71,11 @@ class ZMQClient(StratusClient):
                 self.request_socket = self.context.socket(zmq.REQ)
                
                 # self.request_port = self.connector.connectSocket(self.request_socket, self.host_address, self.default_request_port )
-                self.request_port = self.connector.connectSocketViaSSH(self.request_socket, self.host_address, self.default_request_port, self.server_ssh )
-               
+                if self.server_ssh is not None:
+                    self.request_port = self.connector.connectSocketViaSSH(self.request_socket, self.host_address, self.default_request_port, self.server_ssh )
+                else:
+                    self.request_port = self.connector.connectSocket(self.request_socket, self.host_address, self.default_request_port )
+                
                 
                 self.log("[1]Connected request socket to server {0} on port: {1}".format( self.host_address, self.request_port ) )
                 local_stack = str( [ str(sl) + "\n" for sl in traceback.format_stack() ] )
@@ -95,7 +97,7 @@ class ZMQClient(StratusClient):
         self.log( str(response) )
         # import pdb; pdb.set_trace()
         # self.response_port = 4566
-        response_manager = ResponseManager( self.context, self.connector, response["rid"], self.host_address, self.response_port, status, self.cache_dir, **kwargs )
+        response_manager = ResponseManager( self.context, self.connector, response["rid"], self.host_address, self.response_port, self.server_ssh, status, self.cache_dir, **kwargs )
         response_manager.start()
         return zmqTask( self.cid, response_manager )
 
@@ -129,13 +131,14 @@ class ZMQClient(StratusClient):
 
 class ResponseManager(Thread):
 
-    def __init__(self, context: zmq.Context, connector: ConnectionMode, rid: str, host: str, port: int, status: Status, cache_dir: str, **kwargs ):
+    def __init__(self, context: zmq.Context, connector: ConnectionMode, rid: str, host: str, port: int, server_ssh: str, status: Status, cache_dir: str, **kwargs ):
         Thread.__init__(self)
         self.context = context
         self._connector = connector
         self.logger = StratusLogger.getLogger()
         self.host = host
         self.port = port
+        self.server_ssh = server_ssh
         self.requestId = rid
         self.active = True
         self.mstate = MessageState.RESULT
@@ -163,8 +166,13 @@ class ResponseManager(Thread):
         try:
             self.log("Run RM thread")
             response_socket: zmq.Socket = self.context.socket( zmq.SUB )
-            # response_port = self._connector.connectSocket( response_socket, self.host, self.port )
-            response_port = self._connector.connectSocketViaSSH(response_socket, '127.0.0.1', '4567', "supriys1@taki.rs.umbc.edu:22"  )
+            
+            if self.server_ssh is not None:
+                # response_port = self._connector.connectSocketViaSSH(response_socket, '127.0.0.1', '4567', "supriys1@taki.rs.umbc.edu:22"  )
+                response_port = self._connector.connectSocketViaSSH(response_socket, self.host, str(self.port) , self.server_ssh  )
+            else:
+                response_port = self._connector.connectSocket( response_socket, self.host, self.port )
+
             response_socket.subscribe( s2b( self.requestId ) )
             self.log("Connected response socket on port {} with subscription (client/request) id: '{}', active = {}".format( response_port, self.requestId, str(self.active) ) )
             while( self.active ):
