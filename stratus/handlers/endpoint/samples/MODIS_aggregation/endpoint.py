@@ -3,7 +3,7 @@ from typing import List, Dict
 from stratus_endpoint.handler.execution import Executable, ExecEndpoint
 import xarray as xa
 import abc
-import source.baseline.baseline_series_v8_dask2 as series
+import source.baseline.baseline_series_v8_dask_supriya as series
 import numpy as np
 from datetime import date, datetime
 from dateutil.rrule import rrule, DAILY, MONTHLY
@@ -20,6 +20,9 @@ from dask.distributed import as_completed
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
 from dask.distributed import wait
+
+from  .laads_data_download import  sync
+
 
 class XaOpsEndpoint(ExecEndpoint):
     """
@@ -135,10 +138,41 @@ class XaOpsExecutable(Executable):
         #-------------STEP 1: Set up the specific directory --------
         # data_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=0, delim_whitespace=True))
         data_path_file = np.array(pd.DataFrame.from_dict(json.loads(inputSpec['data_path_file'])))   
-        MYD06_dir    = data_path_file[0,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD06_L2/'
-        MYD06_prefix = data_path_file[0,1] #'MYD06_L2.A'
-        MYD03_dir    = data_path_file[1,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD03/'
-        MYD03_prefix = data_path_file[1,1] #'MYD03.A'
+        if data_path_file is not None:
+            MYD06_dir    = data_path_file[0,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD06_L2/'
+            MYD06_prefix = data_path_file[0,1] #'MYD06_L2.A'
+            MYD03_dir    = data_path_file[1,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD03/'
+            MYD03_prefix = data_path_file[1,1] #'MYD03.A'
+        else:
+            #autodownloading the MYD03 and MYD06 files from the website.
+            start = time.time()
+
+            M03_source_url = "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MYD03/2008/001/"
+            M06_source_url = "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MYD06_L2/2008/001/"
+            M03_localpath = "../new_data/MYD03"
+            M06_localpath = "../new_data/MYD06_L2"
+
+            token =  "F43033A6-B1DB-11EA-9C3C-E3E73909D347"
+
+            if not os.path.exists(M03_localpath):
+                os.makedirs(M03_localpath)
+
+            if not os.path.exists(M06_localpath):
+                os.makedirs(M06_localpath)
+
+            sync(M03_source_url, M03_localpath, token)
+            sync(M06_source_url, M06_localpath, token)
+            
+            print("\n\nCompleted download in " + str(time.time() - start) + " seconds")
+
+            MYD03_dir = M03_localpath
+            MYD03_prefix = "MYD03.A"
+            MYD06_dir = M06_localpath 
+            MYD06_prefix = "MYD06_L2.A"
+
+
+
+
         fileformat = 'hdf'
 
         # output_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=3, delim_whitespace=True))
@@ -253,7 +287,6 @@ class XaOpsExecutable(Executable):
                                     output_dir, output_prefix)
 
 
-        print('****************returning result******')
         #resultDataset = xa.DataArray(xds, name='test')
         return TaskResult(kwargs, [xds])
 
@@ -361,8 +394,7 @@ class XaOpsExecutable(Executable):
             #--------------STEP 7:  Create HDF5 file to store the result------------------------------
             l3name  = output_prefix + '.A{:04d}{:02d}'.format(year,month)
             subname = '_baseline_monthly_v8.h5'
-            #ff=h5py.File(output_dir+l3name+subname,'w')
-            ff=h5py.File(l3name+subname,'w')
+            ff=h5py.File(output_dir+l3name+subname,'w')
 
             PC=ff.create_dataset('lat_bnd',data=map_lat)
             PC.attrs['units']='degrees'
@@ -390,8 +422,7 @@ class XaOpsExecutable(Executable):
             
             ff.close()
 
-            xds = xa.open_dataset(l3name+subname)
-            xds.load()
+            xds = xa.open_dataset(output_dir+l3name+subname)
             print(l3name+subname+' Saved!')
 
             # convert h5py to xarray
