@@ -3,7 +3,7 @@ from typing import List, Dict
 from stratus_endpoint.handler.execution import Executable, ExecEndpoint
 import xarray as xa
 import abc
-import source.baseline.MODIS_Aggregation_Serial as series
+import source.baseline.baseline_series_v8_dask_supriya as series
 import numpy as np
 from datetime import date, datetime
 from dateutil.rrule import rrule, DAILY, MONTHLY
@@ -13,11 +13,15 @@ import pandas as pd
 from netCDF4 import Dataset
 import pdb
 import json
-import calendar
+from collections import OrderedDict
+
+import dask
 from dask.distributed import as_completed
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
 from dask.distributed import wait
+
+from  .laads_data_download import  sync
 
 
 class XaOpsEndpoint(ExecEndpoint):
@@ -30,9 +34,11 @@ class XaOpsEndpoint(ExecEndpoint):
         """
             Factory method for Executable objects.
             Creates an Executable for each analytics operation
+
             Parameters:
             requestSpec (Dict):         Dict which defines the analytics operation
             inputs: (List[TaskResult]): Inputs from other operations in the workflow
+
             Returns:
             Executable: A Executable object which execute the operation.
             """
@@ -55,8 +61,10 @@ class XaOpsEndpoint(ExecEndpoint):
             Used to return metadata describing the capabilities of the Endpoint.
             The only required response is the definition the Endpoint Address (epa) for this Endpoint.
             The epa is used to route operation requests to the an Endpoint that can process them.
+
             Parameters:
                 type (str):  Optionally allows the definition of various types of capabilty requests.
+
             Returns:
                   Dict:  metadata describing the capabilities of the Endpoint.
             """
@@ -74,6 +82,7 @@ class XaOpsExecutable(Executable):
             Creates an Executable for each analytics operation
             The operation request is available as self.request.
             The operation inputs are available as self.inputs.
+
             Returns:
             TaskResult: The result of the operation.
             """
@@ -129,10 +138,41 @@ class XaOpsExecutable(Executable):
         #-------------STEP 1: Set up the specific directory --------
         # data_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=0, delim_whitespace=True))
         data_path_file = np.array(pd.DataFrame.from_dict(json.loads(inputSpec['data_path_file'])))   
-        MYD06_dir    = data_path_file[0,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD06_L2/'
-        MYD06_prefix = data_path_file[0,1] #'MYD06_L2.A'
-        MYD03_dir    = data_path_file[1,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD03/'
-        MYD03_prefix = data_path_file[1,1] #'MYD03.A'
+        if data_path_file is not None:
+            MYD06_dir    = data_path_file[0,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD06_L2/'
+            MYD06_prefix = data_path_file[0,1] #'MYD06_L2.A'
+            MYD03_dir    = data_path_file[1,0] #'/umbc/xfs1/cybertrn/common/Data/Satellite_Observations/MODIS/MYD03/'
+            MYD03_prefix = data_path_file[1,1] #'MYD03.A'
+        else:
+            #autodownloading the MYD03 and MYD06 files from the website.
+            start = time.time()
+
+            M03_source_url = "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MYD03/2008/001/"
+            M06_source_url = "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MYD06_L2/2008/001/"
+            M03_localpath = "../new_data/MYD03"
+            M06_localpath = "../new_data/MYD06_L2"
+
+            token =  "F43033A6-B1DB-11EA-9C3C-E3E73909D347"
+
+            if not os.path.exists(M03_localpath):
+                os.makedirs(M03_localpath)
+
+            if not os.path.exists(M06_localpath):
+                os.makedirs(M06_localpath)
+
+            sync(M03_source_url, M03_localpath, token)
+            sync(M06_source_url, M06_localpath, token)
+            
+            print("\n\nCompleted download in " + str(time.time() - start) + " seconds")
+
+            MYD03_dir = M03_localpath
+            MYD03_prefix = "MYD03.A"
+            MYD06_dir = M06_localpath 
+            MYD06_prefix = "MYD06_L2.A"
+
+
+
+
         fileformat = 'hdf'
 
         # output_path_file = np.array(pd.read_csv(inputSpec['data_path_file'], header=3, delim_whitespace=True))
@@ -147,7 +187,6 @@ class XaOpsExecutable(Executable):
         gap_x, gap_y = grid[1],grid[0] #0.5,0.625
 
         if ((NTA_lons[-1]-NTA_lons[0])%gap_x != 0) | ((NTA_lats[-1]-NTA_lats[0])%gap_y != 0): 
-            print("## ERROR!!!")
             print("Grid size should be dividable by the dimension of the selected region.")
             print("If you choose the region of latitude  from -40 to 40, then you gird size (Latitude ) should be dividable by 80.")
             print("If you choose the region of longitude from  20 to 35, then you gird size (Longitude) should be dividable by 55.")
@@ -161,32 +200,42 @@ class XaOpsExecutable(Executable):
         grid_lat=np.int((NTA_lats[-1]-NTA_lats[0])/gap_y)
 
         #--------------STEP 3: Create arrays for level-3 statistics data-------------------------
-        grid_data = {}
+        t_grid_data = {}
         bin_num1 = np.zeros(len(varnames)).astype(np.int)
         bin_num2 = np.zeros(len(varnames)).astype(np.int)
         key_idx = 0
         for key in varnames:
             if sts_switch[0] == True:
-                grid_data[key+'_'+sts_name[0]] = np.zeros(grid_lat*grid_lon) + np.inf
+                t_grid_data[key+'_'+sts_name[0]] = np.zeros(grid_lat*grid_lon) + np.inf
             if sts_switch[1] == True:
-                grid_data[key+'_'+sts_name[1]] = np.zeros(grid_lat*grid_lon) - np.inf
+                t_grid_data[key+'_'+sts_name[1]] = np.zeros(grid_lat*grid_lon) - np.inf
             if (sts_switch[2] == True) | (sts_switch[3] == True) | (sts_switch[4] == True):
-                grid_data[key+'_'+sts_name[2]] = np.zeros(grid_lat*grid_lon)
-                grid_data[key+'_'+sts_name[3]] = np.zeros(grid_lat*grid_lon)
-                grid_data[key+'_'+sts_name[4]] = np.zeros(grid_lat*grid_lon)
+                t_grid_data[key+'_'+sts_name[2]] = np.zeros(grid_lat*grid_lon)
+                t_grid_data[key+'_'+sts_name[3]] = np.zeros(grid_lat*grid_lon)
+                t_grid_data[key+'_'+sts_name[4]] = np.zeros(grid_lat*grid_lon)
             if sts_switch[5] == True:
                 bin_interval1 = np.fromstring(intervals_1d[key_idx], dtype=np.float, sep=',' )
                 bin_num1[key_idx] = bin_interval1.shape[0]-1
-                grid_data[key+'_'+sts_name[5]] = np.zeros((grid_lat*grid_lon,bin_num1[key_idx]))
+                t_grid_data[key+'_'+sts_name[5]] = np.zeros((grid_lat*grid_lon,bin_num1[key_idx]))
 
                 if sts_switch[6] == True:
                     bin_interval2 = np.fromstring(intervals_2d[key_idx], dtype=np.float, sep=',' )
                     bin_num2[key_idx] = bin_interval2.shape[0]-1
-                    grid_data[key+'_'+sts_name[6]+histnames[key_idx]] = np.zeros((grid_lat*grid_lon,bin_num1[key_idx],bin_num2[key_idx]))
+                    t_grid_data[key+'_'+sts_name[6]+histnames[key_idx]] = np.zeros((grid_lat*grid_lon,bin_num1[key_idx],bin_num2[key_idx]))
 
             key_idx += 1
 
-        #--------------STEP 4: Read the filename list for different time period-------------------
+        # Sort the dictionary by alphabetizing
+        t_grid_data = OrderedDict(sorted(t_grid_data.items(), key=lambda x: x[0]))
+        print("t_grid_data")
+        print(t_grid_data)
+
+        
+        print("Output Variables for Level-3 File:")
+        for key in t_grid_data:
+            print(key)
+
+        # Read the filename list for different time period
         fname1,fname2 = [],[]
 
         start_date = np.fromstring(inputSpec['start_date'], dtype=np.int, sep='/' )
@@ -195,89 +244,47 @@ class XaOpsExecutable(Executable):
         until = date(end_date[0], end_date[1], end_date[2])
 
         for dt in rrule(DAILY, interval=1, dtstart=start, until=until):
-            year  = np.array([np.int(dt.strftime("%Y"))])
-            month = np.array([np.int(dt.strftime("%m"))])
-            day   = np.array([np.int(dt.strftime("%d"))])
-            time  = np.arange(24) #np.int(dt.strftime("%H"))
-            
-            daynew = dt.toordinal()
+            year  = np.int(dt.strftime("%Y"))
+            month = np.int(dt.strftime("%m"))
+            day   = np.int(dt.strftime("%d"))
+
+            data = datetime(year,month,day)
+            daynew = data.toordinal()
             yearstart = datetime(year,1,1)
-            yearend   = calendar.monthrange(year, 12)[1]
-
             day_yearstart = yearstart.toordinal()
-            day_yearend = datetime(year,12,yearend).toordinal()
+            day_in_year = (daynew-day_yearstart)+1
 
-            day_in_year = np.array([(daynew-day_yearstart)+1])
-            end_in_year = np.array([(day_yearend-day_yearstart)+1])
-            
-            # Adjust to 3 hours previous/after the End Date for the orbit gap/overlap problem
-            if (dt.year == until.year) & (dt.month == until.month) & (dt.day == until.day):
-                shift_hour = 3
-                time    = np.append(np.arange(24),np.arange(shift_hour))
-                year    = [year[0],year[0]]
-                day_in_year = [day_in_year[0],day_in_year[0] + 1]
-                if day_in_year[1] > end_in_year:
-                    year[1]   -= 1 
-                    yearstart = datetime(year[1],1,1)
-                    yearend   = datetime(year[1],12,31)
-                    day_yearstart = yearstart.toordinal()
-                    day_yearend   = yearend.toordinal()
-                    day_in_year[1] = (day_yearend-day_yearstart)+1
-            
-            # Start reading Level-2 files 
-            fname_tmp1,fname_tmp2 = series.read_filelist(MYD06_dir,MYD06_prefix,MYD03_dir,MYD03_prefix,year,day_in_year,time,fileformat)
+            yc ='%04i' % year
+            dc ='%03i' % day_in_year
+
+            fname_tmp1 = series.read_filelist(MYD06_dir,MYD06_prefix,yc,dc,fileformat)
+            fname_tmp2 = series.read_filelist(MYD03_dir,MYD03_prefix,yc,dc,fileformat)
             fname1 = np.append(fname1,fname_tmp1)
             fname2 = np.append(fname2,fname_tmp2)
-            
-            #print(fname1.shape,fname2.shape)
+        print('***********year************')
+        print(year,month)
+        print('***********month************')
 
         filenum = np.arange(len(fname1))
-        #print(len(fname1))
+        print(len(fname1))
 
-        #--------------STEP 5: Read Attributes of each variables----------------------------------
-        unit_list = []
-        scale_list = []
-        offst_list = []
-        longname_list = []
-        fillvalue_list = []
 
-        ncfile=Dataset(fname1[0],'r')
 
-        # Read the User-defined variables from MYD06 product
-        tmp_idx = 0
-        for key in varnames:
-            if key == 'cloud_fraction': 
-                name_idx = tmp_idx
-                continue #Ignoreing Cloud_Fraction from the input file
-            else:
-                tmp_data,data_dim,lonam,unit,fill,scale,offst = series.readEntry(key,ncfile,spl_num)
-                unit_list  = np.append(unit_list,unit)
-                scale_list = np.append(scale_list,scale)
-                offst_list = np.append(offst_list,offst)
-                longname_list = np.append(longname_list, lonam)
-                fillvalue_list = np.append(fillvalue_list, fill)
-                tmp_idx += 1
 
-        # Add the long name of cloud freaction at the first row
-        CM_unit     = 'none'
-        CM_longname = 'Cloud Fraction from Cloud Mask (cloudy & prob cloudy)'
-        CM_fillvalue = -9999
-        CM_scale_factor = 0.0001
-        CM_add_offset   = 0.0
-        unit_list      = np.insert(unit_list,      name_idx, CM_unit)
-        scale_list     = np.insert(scale_list,     name_idx, CM_scale_factor)
-        offst_list     = np.insert(offst_list,     name_idx, CM_add_offset)
-        longname_list  = np.insert(longname_list,  name_idx, CM_longname)
-        fillvalue_list = np.insert(fillvalue_list, name_idx, CM_fillvalue)
 
-        ncfile.close()
+
+
+
+
+
         #--------------STEP 6: Start Aggregation------------------------------------------------
 
+        print('***********calling operate************')
 
-        xds = self.operate(fname1,fname2,day_in_year,shift_hour,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
-                                    grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, spl_num, \
+        xds = self.operate(fname1,fname2,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
+                                    t_grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, spl_num, \
                                     sts_name, histnames, bin_num1, bin_num2, year, month, map_lat, map_lon, \
-                                    unit_list, scale_list, offst_list, longname_list, fillvalue_list,output_dir, output_prefix)
+                                    output_dir, output_prefix)
 
 
         #resultDataset = xa.DataArray(xds, name='test')
@@ -285,10 +292,10 @@ class XaOpsExecutable(Executable):
 
 
 
-    def operate(self, fname1,fname2,day_in_year,shift_hour,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
-                                grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, \
+    def operate(self, fname1,fname2,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
+                                t_grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, \
                                 spl_num, sts_name, histnames, bin_num1, bin_num2, year, month, map_lat, map_lon, \
-                                unit_list, scale_list, offst_list, longname_list, fillvalue_list, output_dir, output_prefix):
+                                output_dir, output_prefix):
         """
             Convenience method defined for this particular operation
         """
@@ -299,17 +306,10 @@ class XaOpsExecutable(Executable):
 
             # Start counting operation time
             start_time = timeit.default_timer() 
+            print('***********calling run_modis_aggre************')
 
-            # grid_data = series.run_modis_aggre(fname1,fname2,day_in_year,shift_hour,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
-            #                             grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, spl_num, sts_name, histnames)
-                
-
-            # kwargv = {"fname1": fname1, "fname2": fname2, "day_in_year": day_in_year, "shift_hour": shift_hour, "grid_data":grid_data,"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
-            #  "filenum": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
-            #  "var_idx":var_idx, "spl_num":spl_num, "sts_name":sts_name, "histnames":histnames}
-            # import pdb; pdb.set_trace()
-            kwargv = {"day_in_year": day_in_year, "shift_hour": shift_hour, "grid_data":grid_data,"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
-             "hdfs": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
+            kwargv = {"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
+             "filenum": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
              "var_idx":var_idx, "spl_num":spl_num, "sts_name":sts_name, "histnames":histnames}
 
             cluster = SLURMCluster(cores=1, memory='64 GB', project='pi_jianwu',\
@@ -319,14 +319,13 @@ class XaOpsExecutable(Executable):
             print('***********Scaling Done************')
             client = Client(cluster)
             print('***********Created Client************')
-            # import pdb; pdb.set_trace()
-            tt = client.map(series.run_modis_aggre, [fname1], [fname2], **kwargv)
+            tt = client.map(series.run_modis_aggre, fname1, fname2, **kwargv)
             print('***********Client Mapping Done************')
             for future, result in as_completed(tt, with_results= True):
                 print("future result")
                 print(result)
-                # longname_list = result[1]
-                # result = result[0]
+                longname_list = result[1]
+                result = result[0]
                 # aggregate the result
                 print("grid_lat*grid_lon:")
                 print(grid_lat*grid_lon)
@@ -335,25 +334,26 @@ class XaOpsExecutable(Executable):
                     key_idx = 0
                     for key in varnames:
                         if sts_switch[0] == True:
-                            if  grid_data[key+'_'+sts_name[0]][z] > result[key+'_'+sts_name[0]][z]:
-                                grid_data[key+'_'+sts_name[0]][z] = result[key+'_'+sts_name[0]][z]
+                            if  t_grid_data[key+'_'+sts_name[0]][z] > result[key+'_'+sts_name[0]][z]:
+                                t_grid_data[key+'_'+sts_name[0]][z] = result[key+'_'+sts_name[0]][z]
                         if sts_switch[1] == True:
-                            if  grid_data[key+'_'+sts_name[1]][z] < result[key+'_'+sts_name[1]][z]:
-                                grid_data[key+'_'+sts_name[1]][z] = result[key+'_'+sts_name[1]][z]
+                            if  t_grid_data[key+'_'+sts_name[1]][z] < result[key+'_'+sts_name[1]][z]:
+                                t_grid_data[key+'_'+sts_name[1]][z] = result[key+'_'+sts_name[1]][z]
                         #Total and Count for Mean
                         if (sts_switch[2] == True) | (sts_switch[3] == True):
-                            grid_data[key+'_'+sts_name[2]][z] += result[key+'_'+sts_name[2]][z]
-                            grid_data[key+'_'+sts_name[3]][z] += result[key+'_'+sts_name[3]][z]
+                            t_grid_data[key+'_'+sts_name[2]][z] += result[key+'_'+sts_name[2]][z]
+                            t_grid_data[key+'_'+sts_name[3]][z] += result[key+'_'+sts_name[3]][z]
                         #standard deviation
                         if sts_switch[4] == True:
-                            grid_data[key+'_'+sts_name[4]][z] += result[key+'_'+sts_name[4]][z]
+                            t_grid_data[key+'_'+sts_name[4]][z] += result[key+'_'+sts_name[4]][z]
                         #1D Histogram
                         if sts_switch[5] == True:
-                            grid_data[key+'_'+sts_name[5]][z] += result[key+'_'+sts_name[5]][z]
+                            t_grid_data[key+'_'+sts_name[5]][z] += result[key+'_'+sts_name[5]][z]
                         #2D Histogram
                         if sts_switch[6] == True:
-                            grid_data[key+'_'+sts_name[6]+histnames[key_idx]][z] += result[key+'_'+sts_name[6]+histnames[key_idx]][z]
+                            t_grid_data[key+'_'+sts_name[6]+histnames[key_idx]][z] += result[key+'_'+sts_name[6]+histnames[key_idx]][z]
                         key_idx += 1
+
 
 
             # Compute the mean cloud fraction & Statistics (Include Min & Max & Standard deviation)
@@ -373,36 +373,35 @@ class XaOpsExecutable(Executable):
             for key in varnames:
                 for i in sts_idx:
                     if i == 0:
-                        grid_data[key+'_'+sts_name[0]] = grid_data[key+'_'+sts_name[0]].reshape([grid_lat,grid_lon])
+                        t_grid_data[key+'_'+sts_name[0]] = t_grid_data[key+'_'+sts_name[0]].reshape([grid_lat,grid_lon])
                     elif i == 1:
-                        grid_data[key+'_'+sts_name[1]] = grid_data[key+'_'+sts_name[1]].reshape([grid_lat,grid_lon])
+                        t_grid_data[key+'_'+sts_name[1]] = t_grid_data[key+'_'+sts_name[1]].reshape([grid_lat,grid_lon])
                     elif i == 2:
-                        grid_data[key+'_'+sts_name[2]] = (grid_data[key+'_'+sts_name[2]] / grid_data[key+'_'+sts_name[3]])
-                        grid_data[key+'_'+sts_name[2]] =  grid_data[key+'_'+sts_name[2]].reshape([grid_lat,grid_lon])
+                        t_grid_data[key+'_'+sts_name[2]] = (t_grid_data[key+'_'+sts_name[2]] / t_grid_data[key+'_'+sts_name[3]])
+                        t_grid_data[key+'_'+sts_name[2]] =  t_grid_data[key+'_'+sts_name[2]].reshape([grid_lat,grid_lon])
                     elif i == 3:
-                        grid_data[key+'_'+sts_name[3]] =  grid_data[key+'_'+sts_name[3]].reshape([grid_lat,grid_lon])
+                        t_grid_data[key+'_'+sts_name[3]] =  t_grid_data[key+'_'+sts_name[3]].reshape([grid_lat,grid_lon])
                     elif i == 4:
-                        grid_data[key+'_'+sts_name[4]] = ((grid_data[key+'_'+sts_name[4]] / grid_data[key+'_'+sts_name[3]].ravel()) - grid_data[key+'_'+sts_name[2]].ravel()**2)**0.5
-                        grid_data[key+'_'+sts_name[4]] =  grid_data[key+'_'+sts_name[4]].reshape([grid_lat,grid_lon])
+                        t_grid_data[key+'_'+sts_name[4]] = ((t_grid_data[key+'_'+sts_name[4]] / t_grid_data[key+'_'+sts_name[3]].ravel()) - t_grid_data[key+'_'+sts_name[2]].ravel()**2)**0.5
+                        t_grid_data[key+'_'+sts_name[4]] =  t_grid_data[key+'_'+sts_name[4]].reshape([grid_lat,grid_lon])
                     elif i == 5:
-                        grid_data[key+'_'+sts_name[5]] = grid_data[key+'_'+sts_name[5]].reshape([grid_lat,grid_lon,bin_num1[key_idx]])
+                        t_grid_data[key+'_'+sts_name[5]] = t_grid_data[key+'_'+sts_name[5]].reshape([grid_lat,grid_lon,bin_num1[key_idx]])
                     elif i == 6:
-                        grid_data[key+'_'+sts_name[6]+histnames[key_idx]] = grid_data[key+'_'+sts_name[6]+histnames[key_idx]].reshape([grid_lat,grid_lon,bin_num1[key_idx],bin_num2[key_idx]])
+                        t_grid_data[key+'_'+sts_name[6]+histnames[key_idx]] = t_grid_data[key+'_'+sts_name[6]+histnames[key_idx]].reshape([grid_lat,grid_lon,bin_num1[key_idx],bin_num2[key_idx]])
                 key_idx += 1    
 
             end_time = timeit.default_timer()
 
-            #print('Mean_Fraction:')
-            #print( Mean_Fraction  )
-
             print ("Operation Time in {:7.2f} seconds".format(end_time - start_time))
 
-            #--------------STEP 7:  Create HDF5 file to store the result------------------------------
-            l3name  = output_prefix + '.A{:04d}{:03d}.'.format(year[0],day_in_year[0])
 
-            subname = 'serial_output_daily_1km_v3.h5'
-            #ff=h5py.File(output_dir+l3name+subname,'w')
+            #--------------STEP 7:  Create HDF5 file to store the result------------------------------
+            subname = '_baseline_monthly_v8.h5'
+
+            l3name='MYD08_M3'+'A{:04d}{:02d}'.format(year,month)
             ff=h5py.File(l3name+subname,'w')
+
+
 
             PC=ff.create_dataset('lat_bnd',data=map_lat)
             PC.attrs['units']='degrees'
@@ -414,7 +413,7 @@ class XaOpsExecutable(Executable):
 
             for i in range(sts_idx.shape[0]):
                 cnt = 0
-                for key in grid_data:
+                for key in t_grid_data:
 
                     if key.find("1km") != -1: 
                         new_name = key.replace("_1km", "")
@@ -424,10 +423,9 @@ class XaOpsExecutable(Executable):
                     if (sts_name[sts_idx[i]] in key) == True:  
                         #print(sts_name[sts_idx[i]],key,grid_data[key].shape)
                         #print(longname_list[cnt][:20],new_name)
-                        series.addGridEntry(ff,new_name,unit_list[cnt],longname_list[cnt],fillvalue_list[cnt],scale_list[cnt],offst_list[cnt],grid_data[key],intervals_1d[cnt],intervals_2d[cnt])
-                        cnt += 1
-            
-            
+                        #series.addGridEntry(ff,new_name,unit_list[cnt],longname_list[cnt],fillvalue_list[cnt],scale_list[cnt],offst_list[cnt],grid_data[key])
+                        series.addGridEntry(ff,new_name,'none',longname_list[cnt],t_grid_data[key])
+                        cnt += 1          
             
             ff.close()
 

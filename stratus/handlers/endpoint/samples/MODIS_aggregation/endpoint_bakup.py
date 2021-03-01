@@ -14,10 +14,6 @@ from netCDF4 import Dataset
 import pdb
 import json
 import calendar
-from dask.distributed import as_completed
-from dask_jobqueue import SLURMCluster
-from dask.distributed import Client
-from dask.distributed import wait
 
 
 class XaOpsEndpoint(ExecEndpoint):
@@ -300,62 +296,9 @@ class XaOpsExecutable(Executable):
             # Start counting operation time
             start_time = timeit.default_timer() 
 
-            # grid_data = series.run_modis_aggre(fname1,fname2,day_in_year,shift_hour,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
-            #                             grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, spl_num, sts_name, histnames)
+            grid_data = series.run_modis_aggre(fname1,fname2,day_in_year,shift_hour,NTA_lats,NTA_lons,grid_lon,grid_lat,gap_x,gap_y,filenum, \
+                                        grid_data,sts_switch,varnames,intervals_1d,intervals_2d,var_idx, spl_num, sts_name, histnames)
                 
-
-            # kwargv = {"fname1": fname1, "fname2": fname2, "day_in_year": day_in_year, "shift_hour": shift_hour, "grid_data":grid_data,"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
-            #  "filenum": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
-            #  "var_idx":var_idx, "spl_num":spl_num, "sts_name":sts_name, "histnames":histnames}
-            # import pdb; pdb.set_trace()
-            kwargv = {"day_in_year": day_in_year, "shift_hour": shift_hour, "grid_data":grid_data,"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
-             "hdfs": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
-             "var_idx":var_idx, "spl_num":spl_num, "sts_name":sts_name, "histnames":histnames}
-
-            cluster = SLURMCluster(cores=1, memory='64 GB', project='pi_jianwu',\
-                queue='high_mem', walltime='16:00:00', job_extra=['--exclusive', '--qos=medium+'])
-            print('***********Created cluster************')
-            cluster.scale(4)
-            print('***********Scaling Done************')
-            client = Client(cluster)
-            print('***********Created Client************')
-            # import pdb; pdb.set_trace()
-            tt = client.map(series.run_modis_aggre, [fname1], [fname2], **kwargv)
-            print('***********Client Mapping Done************')
-            for future, result in as_completed(tt, with_results= True):
-                print("future result")
-                print(result)
-                # longname_list = result[1]
-                # result = result[0]
-                # aggregate the result
-                print("grid_lat*grid_lon:")
-                print(grid_lat*grid_lon)
-                for z in np.arange(grid_lat*grid_lon):
-                    # For all variables
-                    key_idx = 0
-                    for key in varnames:
-                        if sts_switch[0] == True:
-                            if  grid_data[key+'_'+sts_name[0]][z] > result[key+'_'+sts_name[0]][z]:
-                                grid_data[key+'_'+sts_name[0]][z] = result[key+'_'+sts_name[0]][z]
-                        if sts_switch[1] == True:
-                            if  grid_data[key+'_'+sts_name[1]][z] < result[key+'_'+sts_name[1]][z]:
-                                grid_data[key+'_'+sts_name[1]][z] = result[key+'_'+sts_name[1]][z]
-                        #Total and Count for Mean
-                        if (sts_switch[2] == True) | (sts_switch[3] == True):
-                            grid_data[key+'_'+sts_name[2]][z] += result[key+'_'+sts_name[2]][z]
-                            grid_data[key+'_'+sts_name[3]][z] += result[key+'_'+sts_name[3]][z]
-                        #standard deviation
-                        if sts_switch[4] == True:
-                            grid_data[key+'_'+sts_name[4]][z] += result[key+'_'+sts_name[4]][z]
-                        #1D Histogram
-                        if sts_switch[5] == True:
-                            grid_data[key+'_'+sts_name[5]][z] += result[key+'_'+sts_name[5]][z]
-                        #2D Histogram
-                        if sts_switch[6] == True:
-                            grid_data[key+'_'+sts_name[6]+histnames[key_idx]][z] += result[key+'_'+sts_name[6]+histnames[key_idx]][z]
-                        key_idx += 1
-
-
             # Compute the mean cloud fraction & Statistics (Include Min & Max & Standard deviation)
 
             # Reference for statstic parameters

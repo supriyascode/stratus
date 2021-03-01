@@ -307,7 +307,7 @@ class XaOpsExecutable(Executable):
             # kwargv = {"fname1": fname1, "fname2": fname2, "day_in_year": day_in_year, "shift_hour": shift_hour, "grid_data":grid_data,"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
             #  "filenum": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
             #  "var_idx":var_idx, "spl_num":spl_num, "sts_name":sts_name, "histnames":histnames}
-            # import pdb; pdb.set_trace()
+            import pdb; pdb.set_trace()
             kwargv = {"day_in_year": day_in_year, "shift_hour": shift_hour, "grid_data":grid_data,"NTA_lats": NTA_lats, "NTA_lons": NTA_lons, "grid_lon": grid_lon,"grid_lat": grid_lat, "gap_x": gap_x, "gap_y": gap_y,\
              "hdfs": filenum, "sts_switch":sts_switch, "varnames": varnames, "intervals_1d":intervals_1d, "intervals_2d":intervals_2d, \
              "var_idx":var_idx, "spl_num":spl_num, "sts_name":sts_name, "histnames":histnames}
@@ -319,14 +319,14 @@ class XaOpsExecutable(Executable):
             print('***********Scaling Done************')
             client = Client(cluster)
             print('***********Created Client************')
-            # import pdb; pdb.set_trace()
-            tt = client.map(series.run_modis_aggre, [fname1], [fname2], **kwargv)
+            import pdb; pdb.set_trace()
+            tt = client.map(series.run_modis_aggre, fname1, fname2, **kwargv)
             print('***********Client Mapping Done************')
             for future, result in as_completed(tt, with_results= True):
                 print("future result")
                 print(result)
-                # longname_list = result[1]
-                # result = result[0]
+                longname_list = result[1]
+                result = result[0]
                 # aggregate the result
                 print("grid_lat*grid_lon:")
                 print(grid_lat*grid_lon)
