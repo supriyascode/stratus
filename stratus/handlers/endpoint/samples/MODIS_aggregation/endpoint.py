@@ -319,41 +319,67 @@ class XaOpsExecutable(Executable):
             print('***********Scaling Done************')
             client = Client(cluster)
             print('***********Created Client************')
-            # import pdb; pdb.set_trace()
-            tt = client.map(series.run_modis_aggre, [fname1], [fname2], **kwargv)
+            tt = client.map(series.run_modis_aggre, fname1, fname2, **kwargv)
             print('***********Client Mapping Done************')
             for future, result in as_completed(tt, with_results= True):
                 print("future result")
-                print(result)
+                # print(result)
                 # longname_list = result[1]
                 # result = result[0]
                 # aggregate the result
-                print("grid_lat*grid_lon:")
-                print(grid_lat*grid_lon)
-                for z in np.arange(grid_lat*grid_lon):
+                # print("grid_lat*grid_lon:")
+                # print(grid_lat*grid_lon)
+
+                # for z in np.arange(grid_lat*grid_lon):
+                #     # For all variables
+                #     key_idx = 0
+                #     for key in varnames:
+                #         if sts_switch[0] == True:
+                #             if  grid_data[key+'_'+sts_name[0]][z] > result[key+'_'+sts_name[0]][z]:
+                #                 grid_data[key+'_'+sts_name[0]][z] = result[key+'_'+sts_name[0]][z]
+                #         if sts_switch[1] == True:
+                #             if  grid_data[key+'_'+sts_name[1]][z] < result[key+'_'+sts_name[1]][z]:
+                #                 grid_data[key+'_'+sts_name[1]][z] = result[key+'_'+sts_name[1]][z]
+                #         #Total and Count for Mean
+                #         if (sts_switch[2] == True) | (sts_switch[3] == True):
+                #             grid_data[key+'_'+sts_name[2]][z] += result[key+'_'+sts_name[2]][z]
+                #             grid_data[key+'_'+sts_name[3]][z] += result[key+'_'+sts_name[3]][z]
+                #         #standard deviation
+                #         if sts_switch[4] == True:
+                #             grid_data[key+'_'+sts_name[4]][z] += result[key+'_'+sts_name[4]][z]
+                #         #1D Histogram
+                #         if sts_switch[5] == True:
+                #             grid_data[key+'_'+sts_name[5]][z] += result[key+'_'+sts_name[5]][z]
+                #         #2D Histogram
+                #         if sts_switch[6] == True:
+                #             grid_data[key+'_'+sts_name[6]+histnames[key_idx]][z] += result[key+'_'+sts_name[6]+histnames[key_idx]][z]
+                #         key_idx += 1
+
+                # for z in np.arange(grid_lat*grid_lon):
                     # For all variables
-                    key_idx = 0
-                    for key in varnames:
-                        if sts_switch[0] == True:
-                            if  grid_data[key+'_'+sts_name[0]][z] > result[key+'_'+sts_name[0]][z]:
-                                grid_data[key+'_'+sts_name[0]][z] = result[key+'_'+sts_name[0]][z]
-                        if sts_switch[1] == True:
-                            if  grid_data[key+'_'+sts_name[1]][z] < result[key+'_'+sts_name[1]][z]:
-                                grid_data[key+'_'+sts_name[1]][z] = result[key+'_'+sts_name[1]][z]
-                        #Total and Count for Mean
-                        if (sts_switch[2] == True) | (sts_switch[3] == True):
-                            grid_data[key+'_'+sts_name[2]][z] += result[key+'_'+sts_name[2]][z]
-                            grid_data[key+'_'+sts_name[3]][z] += result[key+'_'+sts_name[3]][z]
-                        #standard deviation
-                        if sts_switch[4] == True:
-                            grid_data[key+'_'+sts_name[4]][z] += result[key+'_'+sts_name[4]][z]
-                        #1D Histogram
-                        if sts_switch[5] == True:
-                            grid_data[key+'_'+sts_name[5]][z] += result[key+'_'+sts_name[5]][z]
-                        #2D Histogram
-                        if sts_switch[6] == True:
-                            grid_data[key+'_'+sts_name[6]+histnames[key_idx]][z] += result[key+'_'+sts_name[6]+histnames[key_idx]][z]
-                        key_idx += 1
+                key_idx = 0
+                for key in varnames:
+                    if sts_switch[0] == True:
+                        # if  grid_data[key+'_'+sts_name[0]][z] > result[key+'_'+sts_name[0]][z]:
+                        grid_data[key+'_'+sts_name[0]] = np.min([grid_data[key+'_'+sts_name[0]],result[key+'_'+sts_name[0]]],axis=0)
+                    if sts_switch[1] == True:
+                        # if  grid_data[key+'_'+sts_name[1]][z] < result[key+'_'+sts_name[1]][z]:
+                        grid_data[key+'_'+sts_name[1]] = np.max([grid_data[key+'_'+sts_name[1]],result[key+'_'+sts_name[1]]],axis=0)
+                    #Total and Count for Mean
+                    if (sts_switch[2] == True) | (sts_switch[3] == True):
+                        grid_data[key+'_'+sts_name[2]] += result[key+'_'+sts_name[2]]
+                        grid_data[key+'_'+sts_name[3]] += result[key+'_'+sts_name[3]]
+                    #standard deviation
+                    if sts_switch[4] == True:
+                        grid_data[key+'_'+sts_name[4]] += result[key+'_'+sts_name[4]]
+                    #1D Histogram
+                    if sts_switch[5] == True:
+                        grid_data[key+'_'+sts_name[5]] += result[key+'_'+sts_name[5]]
+                    #2D Histogram
+                    if sts_switch[6] == True:
+                        grid_data[key+'_'+sts_name[6]+histnames[key_idx]] += result[key+'_'+sts_name[6]+histnames[key_idx]]
+                    key_idx += 1
+
 
 
             # Compute the mean cloud fraction & Statistics (Include Min & Max & Standard deviation)
