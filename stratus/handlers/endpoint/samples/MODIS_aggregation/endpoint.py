@@ -315,14 +315,17 @@ class XaOpsExecutable(Executable):
             cluster = SLURMCluster(cores=1, memory='64 GB', project='pi_jianwu',\
                 queue='high_mem', walltime='16:00:00', job_extra=['--exclusive', '--qos=medium+'])
             print('***********Created cluster************')
-            cluster.scale(4)
+            cluster.scale(5)
             print('***********Scaling Done************')
             client = Client(cluster)
             print('***********Created Client************')
             tt = client.map(series.run_modis_aggre, fname1, fname2, **kwargv)
             print('***********Client Mapping Done************')
+            num_results= 0
             for future, result in as_completed(tt, with_results= True):
-                print("future result")
+                print("future result " + str(num_results))
+                num_results+=1
+                #continue
                 # print(result)
                 # longname_list = result[1]
                 # result = result[0]
